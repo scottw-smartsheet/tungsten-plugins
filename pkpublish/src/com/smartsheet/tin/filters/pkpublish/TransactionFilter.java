@@ -267,6 +267,10 @@ public class TransactionFilter {
 		this.row_messages.clear();
 		this.row_publish_messages.clear();
 
+		// We start with the assumption that the entire TransactionFilter will match, and
+		// then mark that as false if anything doesn't match.
+		result.setTransactionFilterMatched(true);
+
 		// Flip this as soon as an OneRowChange fails to match.
 		result.setAllORCsMatched(true);
 
@@ -290,14 +294,12 @@ public class TransactionFilter {
 			} 
 		}
 
-
 		if (this.must_match_all_rows && ! result.allORCsMatched()) {
 			result.setTransactionFilterMatched(false);
 		}
 		if (this.must_match_all_filters && ! result.allRowFiltersMatched()) {
 			result.setTransactionFilterMatched(false);
 		}
-
 		return result;
 	}
 
@@ -306,7 +308,5 @@ public class TransactionFilter {
 		return String.format("<TransactionFilter name: %s with %d RowFilters>",
 				this.getName(), this.row_filters.size());
 	}
-
-
 
 }

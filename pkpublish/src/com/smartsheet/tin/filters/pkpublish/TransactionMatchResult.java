@@ -1,19 +1,19 @@
 /**
-* Copyright 2014-2015 Smartsheet.com, Inc.
-* 
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*
-*/
+ * Copyright 2014-2015 Smartsheet.com, Inc.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 /**
  * Bundle up and provide easy access to the results of comparing 
@@ -60,6 +60,9 @@ public class TransactionMatchResult {
 		}
 	}
 
+	// FIXME:  Handle No ORCs matching differently than at least one ORC matching. 
+	// Right now, they are effectively equivalent.
+
 
 	public void setAllORCsMatched(boolean all_orcs_matched) {
 		this.all_orcs_matched = all_orcs_matched;
@@ -89,10 +92,10 @@ public class TransactionMatchResult {
 		for (Map.Entry<RowFilter, Boolean> entry :
 			this.row_filter_match_state.entrySet()) {
 			if (! entry.getValue()) {
-				logger.debug("Row filter: " + entry.getKey().toString() + "did not match");
+				logger.debug("Row filter: " + entry.getKey().toString() + " did not match");
 				return false;
 			} else {
-				logger.debug("Row filter: " + entry.getKey().toString() + "matched");
+				logger.debug("Row filter: " + entry.getKey().toString() + " matched");
 			}
 		}
 		logger.debug("All Row filters matched.");
@@ -170,9 +173,10 @@ public class TransactionMatchResult {
 	public Pair<String,String> getTransactionFilterMessageToPublish(
 			ORCFormatter orc_formatter) throws PKPublishException {
 		if (! this.match_state_set) {
-			throw new PKPublishException("Must call " +
-					" TransacttionMatchResult.setTransactionFilterMatched() " +
-					"before getting the messages from the match result.");
+			logger.error("Must call " +
+					"TransactionMatchResult.setTransactionFilterMatched()" +
+					"before getting messages from the match result.");
+			throw new PKPublishException("TransactionMatchResult not ready");
 		}
 		if (! this.transaction_filter_matched) {
 			return null;
@@ -198,8 +202,7 @@ public class TransactionMatchResult {
 				logger.error(err);
 				msg = ti.toBasicJSON();
 			}
-		}
-		else {
+		} else {
 			for (Pair<OneRowChange,RowFilter> orc_rf :
 				this.matched_orcs_and_their_filters) {
 				OneRowChange orc = orc_rf.first;
