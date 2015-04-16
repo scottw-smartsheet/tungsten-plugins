@@ -240,10 +240,53 @@ Some of the more relevant metrics are:
     reportStartTime - Timestamp (in milliseconds) of start of covered time
     reportEndTime - Timestamp (in milliseconds) of end of covered time
 
+
+# Example message consumer
+
+The script below uses the pika library (`pip install pika`) to get messages
+from a message queue.  With the PKPublish set to publish messages to the
+same exchange using the same routing key, this script will write the
+received messages to stdout.
+
+```
+#!/usr/bin/env python
+import pika
+import json
+
+creds = pika.PlainCredentials('username', 'password')
+
+conn = pika.BlockingConnection(pika.ConnectionParameters(
+    host='localhost', credentials=creds))
+
+channel = conn.channel()
+channel.exchange_declare(exchange='my_exchange', exchange_type='topic',
+    durable=True)
+
+result = channel.queue_declare(exclusive=True)
+queue_name = result.method.queue
+
+def cb(ch, method, properties, body):
+    print "ch:", ch, "method:", method, "properties:", properties, "body:", body;
+    try:
+        obj = json.loads(body)
+        print "    Loaded body as JSON!"
+        print obj
+    except Exception, e:
+        print "    Error loading body as JSON.", str(e)
+
+channel.queue_bind(exchange='my_exchange', queue=queue_name, routing_key='test.foo')
+channel.basic_consume(cb, queue=queue_name, no_ack=True)
+channel.start_consuming()
+```
+
 # TODO 
 
+ * Revisit TransactionFilter's match requirments
+   * Make the difference between ALL or ANY more clear in docs and code
+ * Internally, actions should probably implement some sort of visitor pattern.
+ * Add the ability to define the messages using a template.
+   * Include ability to reference fields from the transaction/rows and filter
  * The ORCFormatter class probably needs to be renamed.
- * Add authentication support for the message queue configuration.
  * Document the rest of the metrics.
  * Determine which metrics should be captured that aren't.
  * Identify extraneous metrics that don't need to be captured.
