@@ -1,0 +1,35 @@
+<project name="Tungsten Discard Applier Plug-In" default="package">
+
+    <target name="buildclean">
+        <delete dir="build"/>
+    </target>
+
+    <target name="clean" depends="buildclean">
+        <delete file="DiscardApplier.jar"/>
+    </target>
+
+    <target name="init" depends="buildclean">
+        <mkdir dir="build"/>
+    </target>
+
+    <path id="libs">
+        <fileset dir="lib">
+            <include name="**/*.jar"/>
+        </fileset>
+    </path>
+
+    <target name="compile" depends="init">
+        <javac srcdir="src" destdir="build"
+            debug="true" debuglevel="lines,vars,source"
+            includeantruntime="false">
+            <classpath refid="libs"/>
+        </javac>
+        <copy file="readme.md" todir="build"/>
+        <copy file="COPYRIGHT.txt" todir="build"/>
+        <copy file="LICENSE.txt" todir="build"/>
+    </target>
+
+    <target name="package" depends="compile">
+        <jar destfile="DiscardApplier.jar" basedir="build"/>
+    </target>
+</project>
