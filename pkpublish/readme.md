@@ -8,6 +8,9 @@ __NOTE: this filter plugin is currently under relatively heavy churn, and may no
 
 # Dependencies
 
+The plugin currently supports Tungsten 2.2.1.  It may work with other
+versions of the Tungsten Replicator, but it has not been tested with them.
+
 The following libraries are needed to build the plugin:
 
  * jackson-annotations-2.3.3.jar
