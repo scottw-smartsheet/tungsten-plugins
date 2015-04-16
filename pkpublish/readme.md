@@ -4,6 +4,8 @@ Primary Key to Message Queue
 A Tungsten Replicator Filter plugin to send primary keys of replicated rows
 to a RabbitMQ message queue.
 
+__NOTE: this filter plugin is currently under relatively heavy churn, and may not work corectly.__
+
 # Dependencies
 
 The following libraries are needed to build the plugin:
