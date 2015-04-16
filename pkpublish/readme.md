@@ -31,7 +31,8 @@ to manage the build and dependencies.
 
     ant package
 
-Creates the file PKPublish.jar
+Creates the file PKPublish.jar.  The libaries it depends on are expected to
+be found in the `./lib` directory.
 
 # Deploying the Plugin
 
