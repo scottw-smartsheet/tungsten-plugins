@@ -35,29 +35,24 @@ import com.smartsheet.tin.filters.common.ORCFormatter;
 import com.smartsheet.tin.filters.common.Pair;
 import com.smartsheet.tin.filters.common.TransactionInfo;
 
-public class TransactionMatchResult {
-	private static Logger logger = Logger.getLogger(TransactionMatchResult.class);
+public class TransactionMatchResultAccumulator {
+	private static Logger logger = Logger.getLogger(TransactionMatchResultAccumulator.class);
 	private List<Pair<OneRowChange, RowFilter>> matched_orcs_and_their_filters;
 	private Map<RowFilter, Boolean> row_filter_match_state;
+	private Map<OneRowChange, Boolean> orc_match_state;
 	private TransactionFilter tfilter;
 	private ReplDBMSEvent event;
 	private boolean all_orcs_matched;
 	private boolean transaction_filter_matched;
-	private boolean match_state_set;
 
-	public TransactionMatchResult(TransactionFilter tf, ReplDBMSEvent event) {
+	public TransactionMatchResultAccumulator(TransactionFilter tf, ReplDBMSEvent event) {
 		this.matched_orcs_and_their_filters = new ArrayList<Pair<OneRowChange, RowFilter>>();
 		this.row_filter_match_state = new HashMap<RowFilter, Boolean>();
+		this.orc_match_state = new HashMap<OneRowChange, Boolean>();
 		this.event = event;
 		this.tfilter = tf;
-		this.all_orcs_matched = false;
-		this.all_orcs_matched = false;
-		this.transaction_filter_matched = false;
-		this.match_state_set = false;
-
-		for (RowFilter rf : tf.getRowFilters()) {
-			this.row_filter_match_state.put(rf,  false);
-		}
+		this.all_orcs_matched = true;
+		this.transaction_filter_matched = true;
 	}
 
 	// FIXME:  Handle No ORCs matching differently than at least one ORC matching. 
@@ -72,59 +67,130 @@ public class TransactionMatchResult {
 		return this.all_orcs_matched;
 	}
 
+
 	/**
-	 * Record that a RowFilter matched a particular OneRowChange.
+	 * Accumulate the result of comparing a RowFilter against a OneRowChange.
 	 * 
-	 * @param orc The OneRowChange that was matched by the RowFilter.
-	 * @param rf The RowFilter that matched.
+	 * @param rf The RowFilter that was used.
+	 * @param orc The OneRowChange that was compared.
+	 * @param matched The result of the comparison.
 	 */
-	public void recordRowFilterMatchedOrc(RowFilter rf, OneRowChange orc) {
-		this.matched_orcs_and_their_filters.add(Pair.of(orc, rf));
-		this.row_filter_match_state.put(rf,  true);
+	public void recordRowFilterOrcCompare(RowFilter rf, OneRowChange orc,
+			boolean matched ) {
+		if (matched) {
+			this.orc_match_state.put(orc,  true);
+			this.row_filter_match_state.put(rf, true);
+			this.matched_orcs_and_their_filters.add(Pair.of(orc, rf));
+		} else  {
+			if (! this.orc_match_state.containsKey(orc)) {
+				this.orc_match_state.put(orc, false);
+			}
+			if (! this.row_filter_match_state.containsKey(rf)) {
+				this.row_filter_match_state.put(rf, false);
+			}
+		}
 	}
 
 
 	/**
 	 * Return true if, and only if, all of the RowFilters matched. 
+	 * 
 	 * @return true if all RowFilters matched, false otherwise.
 	 */
 	public boolean allRowFiltersMatched() {
-		for (Map.Entry<RowFilter, Boolean> entry :
-			this.row_filter_match_state.entrySet()) {
-			if (! entry.getValue()) {
-				logger.debug("Row filter: " + entry.getKey().toString() + " did not match");
-				return false;
-			} else {
-				logger.debug("Row filter: " + entry.getKey().toString() + " matched");
-			}
-		}
-		logger.debug("All Row filters matched.");
-		return true;
+		return ! this.row_filter_match_state.values().contains(false);
 	}
+
 
 	/**
 	 * Return true, if and only if, any of the RowFilters matched.
+	 * 
 	 * @return true if at least one RowFilter matched, false otherwise.
 	 */
 	public boolean anyRowFiltersMatched() {
-		for (Map.Entry<RowFilter, Boolean> entry :
-			this.row_filter_match_state.entrySet()) {
-			if (entry.getValue()) {
-				return true;
-			}
-		}
-		return false;
+		return this.row_filter_match_state.values().contains(true);
 	}
 
 
-	public void setTransactionFilterMatched(boolean matched) {
-		this.transaction_filter_matched = matched;
-		this.match_state_set = true;
+	/**
+	 * Return true, if and only if, none of the RowFilters matched.
+	 * 
+	 * @return if no RowFilters matched, false otherwise
+	 */
+	public boolean noRowFiltersMatched() {
+		return ! anyRowFiltersMatched();
+	}
+
+
+	/**
+	 * Return true, if and only if, all of the OneRowChanges matched.
+	 * 
+	 * @return true if all the OneRowChanges were matched by a RowFilter.
+	 */
+	public boolean allOrcsMatched() {
+		return ! this.orc_match_state.values().contains(false);
+	}
+
+
+	/**
+	 * Return true, if and only if, at least one OneRowChange matched.
+	 * 
+	 * @return true if any of the OneRowChanges were matched by a RowFilter.
+	 */
+	public boolean anyOrcsMatched() {
+		return this.orc_match_state.values().contains(true);
+	}
+
+
+	/**
+	 * Return true, if and only if, none of the OneRowChanges matched.
+	 * 
+	 * @return true if none of the OneRowChanges were matched by a RowFilter.
+	 */
+	public boolean noOrcsMatched() {
+		return ! anyOrcsMatched();
 	}
 
 
 	public boolean transactionFilterDidMatch() {
 		return this.transaction_filter_matched;
+	}
+	
+	/**
+	 * Return whether or not the underlying event matched the filter.
+	 * 
+	 * @return
+	 */
+	public boolean matched() {
+		if (this.tfilter.mustMatchAllFilters()) {
+			if (! this.allRowFiltersMatched()) {
+				return false;
+			}
+		} else if (this.tfilter.mustMatchAnyFilters()) {
+			if (! this.anyRowFiltersMatched()) {
+				return false;
+			}
+		} else if (this.tfilter.mustMatchNoFilters()) {
+			if (! this.noRowFiltersMatched()) {
+				return false;
+			}
+		}
+		
+		if (this.tfilter.mustMatchAllRows()) {
+			if (! this.allRowFiltersMatched()) {
+				return false;
+			}
+		} else if (this.tfilter.mustMatchAnyRows()) {
+			if (! this.anyRowFiltersMatched()) {
+				return false;
+			}
+		} else if (this.tfilter.mustMatchNoRows()) {
+			if (! this.noOrcsMatched()) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 
@@ -172,13 +238,7 @@ public class TransactionMatchResult {
 	 */
 	public Pair<String,String> getTransactionFilterMessageToPublish(
 			ORCFormatter orc_formatter) throws PKPublishException {
-		if (! this.match_state_set) {
-			logger.error("Must call " +
-					"TransactionMatchResult.setTransactionFilterMatched()" +
-					"before getting messages from the match result.");
-			throw new PKPublishException("TransactionMatchResult not ready");
-		}
-		if (! this.transaction_filter_matched) {
+		if (! this.matched() ) {
 			return null;
 		}
 		if (! this.tfilter.shouldPublish()) {
@@ -189,6 +249,8 @@ public class TransactionMatchResult {
 				this.event.getExtractedTstamp().getTime());
 
 		String msg = "";
+		
+		// TODO: Cleaner handling of the two different message approaches.
 
 		if (this.tfilter.hasMessage()) {
 			ti.message = this.tfilter.getMessage();
