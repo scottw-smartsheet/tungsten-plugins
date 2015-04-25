@@ -113,9 +113,9 @@ public class PKPublishFilterRules {
 	 * @param event The Event to apply the filters to.
 	 * @return A list of TransactionMatchResult objects.
 	 */
-	public List<TransactionMatchResult>  apply(ReplDBMSEvent event) {
-		List<TransactionMatchResult> results = 
-				new ArrayList<TransactionMatchResult>();
+	public List<TransactionMatchResultAccumulator>  apply(ReplDBMSEvent event) {
+		List<TransactionMatchResultAccumulator> results = 
+				new ArrayList<TransactionMatchResultAccumulator>();
 		for (TransactionFilter tf : this.transaction_filters) {
 			results.add(tf.match(event));
 		}

@@ -1,19 +1,19 @@
 /**
-* Copyright 2014-2015 Smartsheet.com, Inc.
-* 
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*
-*/
+ * Copyright 2014-2015 Smartsheet.com, Inc.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
 
 
 package com.smartsheet.tin.filters.pkpublish;
@@ -47,7 +47,11 @@ public class TransactionFilter {
 	private String name;
 	private String cached_name;
 	private boolean must_match_all_filters;
+	private boolean must_match_any_filters;
+	private boolean must_match_no_filters;
 	private boolean must_match_all_rows;
+	private boolean must_match_any_rows;
+	private boolean must_match_no_rows;
 	private List<RowFilter> row_filters;
 	private List<MatchAction> actions;
 
@@ -72,8 +76,12 @@ public class TransactionFilter {
 		this.cached_name = null;
 		this.current_counter = TransactionFilter.counter;
 		TransactionFilter.counter++;
-		this.must_match_all_filters = false;
-		this.must_match_all_rows = false;
+		this.must_match_all_filters = true;
+		this.must_match_any_filters = true;
+		this.must_match_no_filters = false;
+		this.must_match_all_rows = true;
+		this.must_match_any_rows = true;
+		this.must_match_no_rows = false;
 		this.row_filters = new ArrayList<RowFilter>();
 		this.actions = new ArrayList<MatchAction>();
 		this.publish = false;
@@ -91,11 +99,8 @@ public class TransactionFilter {
 
 		TransactionFilter tf = new TransactionFilter();
 		tf.setName(fetchChildString(node, "name", false));
-		tf.setMustMatchAllFilters(fetchChildBoolean(node,
-				"must_match_all_filters", tf.must_match_all_filters));
-		tf.setMustMatchAllRows(fetchChildBoolean(node,
-				"must_match_all_rows", tf.must_match_all_rows));
-
+		tf.setFilterMatchRule(fetchChildString(node, "filter_match_rule", false));
+		tf.setRowMatchRule(fetchChildString(node, "row_match_rule", false));
 
 		JsonNode row_filters_jn = fetchChildByName(node, "row_filters",
 				"array");
@@ -134,6 +139,82 @@ public class TransactionFilter {
 	}
 
 
+	/**
+	 * Set whether all, any, or none of the filter rules must match.
+	 * 
+	 * @param rule The string (from the JSON rules).
+	 * @throws JsonFilterException
+	 */
+	private void setFilterMatchRule(String rule) throws JsonFilterException {
+		if (rule == null) {
+			String err = "filter_match_rule had no value, " +
+					"valid values are:  'ALL', 'ANY', or 'NONE'";
+			logger.error(err);
+			throw new JsonFilterException(err);
+		}
+
+		resetFilterMatchRules();
+
+		if (rule.equalsIgnoreCase("ALL")) {
+			this.must_match_all_filters = true;
+		} else if (rule.equalsIgnoreCase("ANY")) {
+			this.must_match_any_filters = true;
+		} else if (rule.equalsIgnoreCase("NONE")) {
+			this.must_match_no_filters = true;
+		} else {
+			String err = String.format("filter_match_rule '%s' not valid, " +
+					"valid values are:  'ALL', 'ANY', or 'NONE'", rule);
+			logger.error(err);
+			throw new JsonFilterException(err);
+		}
+	}
+
+
+	private void resetFilterMatchRules() {
+		this.must_match_all_filters = false;
+		this.must_match_any_filters = false;
+		this.must_match_no_filters = false;
+	}
+
+
+	/**
+	 * Set whether all, any, or none of the OneRowChanges must match.
+	 * 
+	 * @param rule The string (from the JSON rules).
+	 * @throws JsonFilterException
+	 */
+	private void setRowMatchRule(String rule) throws JsonFilterException {
+		if (rule == null) {
+			String err = "row_match_rule had no value, " +
+					"valid values are:  'ALL', 'ANY', or 'NONE'";
+			logger.error(err);
+			throw new JsonFilterException(err);
+		}
+
+		resetRowMatchRules();
+
+		if (rule.equalsIgnoreCase("ALL")) {
+			this.must_match_all_rows = true;
+		} else if (rule.equalsIgnoreCase("ANY")) {
+			this.must_match_any_rows = true;
+		} else if (rule.equalsIgnoreCase("NONE")) {
+			this.must_match_no_rows = true;
+		} else {
+			String err = String.format("row_match_rule '%s' not valid, " +
+					"valid values are:  'ALL', 'ANY', or 'NONE'", rule);
+			logger.error(err);
+			throw new JsonFilterException(err);
+		}
+	}
+
+
+	private void resetRowMatchRules() {
+		this.must_match_all_rows = false;
+		this.must_match_any_rows = false;
+		this.must_match_no_rows = false;
+	}
+
+
 	public void setName(String name) {
 		this.name = name;
 	}
@@ -156,18 +237,18 @@ public class TransactionFilter {
 	}
 
 
-	public void setMustMatchAllFilters(boolean match_all) {
-		this.must_match_all_filters = match_all;
-	}
-
-
 	public boolean mustMatchAllFilters() {
 		return this.must_match_all_filters;
 	}
 
 
-	public void setMustMatchAllRows(boolean match_all) {
-		this.must_match_all_rows = match_all;
+	public boolean mustMatchAnyFilters() {
+		return this.must_match_any_filters;
+	}
+
+
+	public boolean mustMatchNoFilters() {
+		return this.must_match_no_filters;
 	}
 
 
@@ -175,6 +256,15 @@ public class TransactionFilter {
 		return this.must_match_all_rows;
 	}
 
+
+	public boolean mustMatchAnyRows() {
+		return this.must_match_any_rows;
+	}
+
+
+	public boolean mustMatchNoRows() {
+		return this.must_match_no_rows;
+	}
 
 	public void setPublish(boolean should_publish) {
 		this.publish = should_publish;
@@ -258,47 +348,28 @@ public class TransactionFilter {
 	 * @param event The transaction (or, potentially, transaction fragment).
 	 * @return
 	 */
-	public TransactionMatchResult match(ReplDBMSEvent event) {
-		// TODO:  Switch to a more efficient rule matching algorithm.
-		// Some sort of tree would probably be better than the current
-		// nested loop approach.
-
-		TransactionMatchResult result = new TransactionMatchResult(this, event);
+	public TransactionMatchResultAccumulator match(ReplDBMSEvent event) {
 		this.row_messages.clear();
 		this.row_publish_messages.clear();
 
-		// We start with the assumption that the entire TransactionFilter will match, and
-		// then mark that as false if anything doesn't match.
-		result.setTransactionFilterMatched(true);
-
-		// Flip this as soon as an OneRowChange fails to match.
-		result.setAllORCsMatched(true);
+		// Compare this TransactionFilter's RowFilters against each of the
+		// OneRowChange objects in this transaction.  Along the way, we keep
+		// track of whether or not each OneRowChange has been matched by at
+		// least one RowFilter and whether or not each RowFilter has matched
+		// at least one OneRowChange.
+		TransactionMatchResultAccumulator result = 
+				new TransactionMatchResultAccumulator(this, event);
 
 		for (DBMSData edata : event.getData()) {
-			if (edata.getClass() == RowChangeData.class){
-				RowChangeData rcdata = (RowChangeData) edata;
-				for (OneRowChange orc : rcdata.getRowChanges()) {
-					boolean orc_matched = false;
-					for (RowFilter rf : this.row_filters) {
-						if (rf.match(orc)) {
-							result.recordRowFilterMatchedOrc(rf, orc);
-							orc_matched = true;
-							logger.debug("orc matched rf: " + rf.toString());
-						}
-					}
-					if (! orc_matched) {
-						result.setAllORCsMatched(false);
-						logger.debug("ORC: " + orc.toString() + " was not matched.");
-					}
+			if (! (edata instanceof RowChangeData)) {
+				continue;
+			}
+			RowChangeData rcdata = (RowChangeData) edata;
+			for (OneRowChange orc : rcdata.getRowChanges()) {
+				for (RowFilter rf : this.row_filters) {
+					result.recordRowFilterOrcCompare(rf, orc, rf.match(orc));
 				}
-			} 
-		}
-
-		if (this.must_match_all_rows && ! result.allORCsMatched()) {
-			result.setTransactionFilterMatched(false);
-		}
-		if (this.must_match_all_filters && ! result.allRowFiltersMatched()) {
-			result.setTransactionFilterMatched(false);
+			}
 		}
 		return result;
 	}
