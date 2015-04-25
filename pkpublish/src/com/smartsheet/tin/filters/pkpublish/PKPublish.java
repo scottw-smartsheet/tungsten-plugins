@@ -43,6 +43,7 @@ import com.smartsheet.tin.filters.common.JsonFilterException;
 import com.smartsheet.tin.filters.common.ORCFormatter;
 import com.smartsheet.tin.filters.common.Pair;
 import com.smartsheet.tin.filters.common.TableKeyTracker;
+import com.smartsheet.tin.filters.common.TableKeyTrackerException;
 import com.smartsheet.tin.filters.pkpublish.MQPublishWrapper.MQError;
 
 /**
@@ -71,6 +72,7 @@ public class PKPublish implements Filter {
 
 	private MQPublishWrapper mq;
 
+	private TableKeyTracker tableKeyTracker;
 	private ORCFormatter orcFormatter;
 
 	public PKPublish() {
@@ -78,6 +80,8 @@ public class PKPublish implements Filter {
 		this.ruleFileCheckInterval = 30;
 		this.statusMessageInterval = 5;
 		this.rules = new PKPublishFilterRules();
+		this.orcFormatter = null;
+		this.tableKeyTracker = null;
 	}
 
 	public void setRuleFile(String ruleFile) throws ReplicatorException {
@@ -205,8 +209,12 @@ public class PKPublish implements Filter {
 			throw new ReplicatorException(
 					"PKPublish not properly configured.");
 		}
+		
 		this.metrics = new FilterMetrics(this.statusMessageInterval, 0);
-		this.orcFormatter = new ORCFormatter(this.metrics);
+		this.tableKeyTracker = new TableKeyTracker(this.dbUrl, this.dbUser,
+				this.dbPassword, this.metrics);
+		this.orcFormatter = new ORCFormatter(this.tableKeyTracker,
+				this.metrics);
 	}
 
 	/**
@@ -219,6 +227,13 @@ public class PKPublish implements Filter {
 		// First, load our filtering rules.
 		// Any errors in the rules are fatal.
 		this.maybeReloadRulesFile(null);
+		
+		// Prepare the table key tracker.
+		try {
+			this.tableKeyTracker.prepare();
+		} catch (TableKeyTrackerException e) {
+			throw new ReplicatorException(e);
+		}
 
 		// Next, connect to the message queue.
 		try {
@@ -228,9 +243,6 @@ public class PKPublish implements Filter {
 			throw new ReplicatorException(
 					"Unable to connect to message queue");
 		}
-
-		// Finally, prepare the formatter.
-		this.orcFormatter.prepare(this.dbUrl, this.dbUser, this.dbPassword);
 	}
 
 	@Override
@@ -247,6 +259,11 @@ public class PKPublish implements Filter {
 				this.orcFormatter.release();
 				this.orcFormatter = null;
 			}
+			
+			if (this.tableKeyTracker != null) {
+				this.tableKeyTracker.release();
+				this.tableKeyTracker = null;
+			}
 			logger.info("PKPublish shutdown");
 		}
 	}
@@ -259,19 +276,8 @@ public class PKPublish implements Filter {
 	public ReplDBMSEvent filter(ReplDBMSEvent event)
 			throws ReplicatorException, InterruptedException {
 		this.metrics.event();
-
-		if (event == null) {
-			this.metrics.nullEvent();
-			return event;
-		}
-		if (event.getDBMSEvent().getClass() == DBMSEmptyEvent.class) {
-			this.metrics.emptyEvent();
-			return event;
-		}
-
-		ArrayList<DBMSData> event_data_list = event.getData();
-		if (event_data_list == null || event_data_list.isEmpty()) {
-			this.metrics.emptyDataList();
+		
+		if (eventIsSkippable(event)) {
 			return event;
 		}
 
@@ -279,14 +285,13 @@ public class PKPublish implements Filter {
 		this.metrics.eventTimestamp(event.getExtractedTstamp());
 
 		/* Update the primary key tracker and the DML/DDL counters. */
-		for (DBMSData edata : event_data_list) {
-			if (edata.getClass() == RowChangeData.class) {
+		for (DBMSData edata : event.getData()) {
+			if (edata instanceof RowChangeData) {
 				this.metrics.dmlEvent();
-			} else if (edata.getClass() == StatementData.class) {
+			} else if (edata instanceof StatementData) {
 				this.metrics.ddlEvent();
-				TableKeyTracker kt = orcFormatter.getKeyTracker();
 				StatementData sdata = (StatementData) edata;
-				kt.maybeUpdateFromStatement(sdata);
+				this.tableKeyTracker.maybeUpdateFromStatement(sdata);
 			} else {
 				logger.warn("Unknown DBMSData type: " + edata.getClass() +
 						" event id: " + event.getEventId());
@@ -294,21 +299,18 @@ public class PKPublish implements Filter {
 		}
 
 		// Have each of the filter rules try to match this transaction.
-		List<TransactionMatchResult> results = this.rules.apply(event);
+		List<TransactionMatchResultAccumulator> results = this.rules.apply(event);
 
 		// Publish any messages from the filter results.
 		// If there are errors, we throw a ReplicatorException.
 		// This way, the replicator will stop and we can restart it
 		// without losing events.
 		// FIXME:  Whether or not publishing errors are fatal should be configurable.
-		for (TransactionMatchResult result : results) {
-			logger.debug("publishing results for result: " + result.toString());
+		for (TransactionMatchResultAccumulator result : results) {
+			logger.debug("Publishing results for result: " + result.toString());
 			publishResultRowFilterMessages(result, event);
 			if (result.transactionFilterDidMatch()) {
-				logger.debug("Result:  " + result.toString() + " Transaction filter did match");
 				publishResultTransactionFilterMessage(result, event);
-			} else {
-				logger.debug("Result:  " + result.toString() + " Transaction filter did not match");
 			}
 		}
 
@@ -322,16 +324,34 @@ public class PKPublish implements Filter {
 		return event;
 	}
 
+
+	private boolean eventIsSkippable(ReplDBMSEvent event) {
+		if (event == null) {
+			this.metrics.nullEvent();
+			return true;
+		}
+		if (event.getDBMSEvent().getClass() == DBMSEmptyEvent.class) {
+			this.metrics.emptyEvent();
+			return true;
+		}
+
+		ArrayList<DBMSData> event_data_list = event.getData();
+		if (event_data_list == null || event_data_list.isEmpty()) {
+			this.metrics.emptyDataList();
+			return true;
+		}
+		return false;
+	}
+
+
 	private void publishResultTransactionFilterMessage(
-			TransactionMatchResult result, ReplDBMSEvent event)
+			TransactionMatchResultAccumulator result, ReplDBMSEvent event)
 					throws ReplicatorException {
 		try {
 			Pair<String, String> rk_msg = 
 					result.getTransactionFilterMessageToPublish(this.orcFormatter);
 			if (rk_msg != null) {
 				this.mq.publishMessage(rk_msg.first, rk_msg.second);
-			} else {
-				logger.debug("Tfilter's msg to publish is null.");
 			}
 		} catch (PKPublishException e) {
 			this.metrics.error();
@@ -348,7 +368,7 @@ public class PKPublish implements Filter {
 	}
 
 
-	private void publishResultRowFilterMessages(TransactionMatchResult result,
+	private void publishResultRowFilterMessages(TransactionMatchResultAccumulator result,
 			ReplDBMSEvent event) throws ReplicatorException {
 		try {
 			for (Pair<String, String> rk_msg :
@@ -420,13 +440,12 @@ public class PKPublish implements Filter {
 		// 
 		try {
 			File fh = new File(this.ruleFile);
-			long last_modified = fh.lastModified();
-			if (last_modified != this.ruleFileLastModified)
+			if (fh.lastModified() != this.ruleFileLastModified)
 			{
 				this.metrics.ruleFileReload();
 				PKPublishFilterRules new_rules = new PKPublishFilterRules();
 				new_rules.loadRulesFromFile(this.ruleFile);
-				ruleFileLastModified = last_modified;
+				ruleFileLastModified = fh.lastModified();
 				this.rules = new_rules;
 			}
 		} catch (IOException e) {

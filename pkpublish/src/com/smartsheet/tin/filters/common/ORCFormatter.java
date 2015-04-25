@@ -74,40 +74,10 @@ public class ORCFormatter {
 	private TableKeyTracker keyTracker;
 	private FilterMetrics metrics;
 
-	public ORCFormatter(FilterMetrics metrics) {
+	public ORCFormatter(TableKeyTracker key_tracker, FilterMetrics metrics) {
 		this.mapper = new ObjectMapper();
-		this.keyTracker = null;
+		this.keyTracker = key_tracker;
 		this.metrics = metrics;
-	}
-
-	/**
-	 * Initialize the formatter. Mostly this means getting setup to lookup the
-	 * keys of tables.
-	 * 
-	 * @param context
-	 *            The context our plug-in is operating in.
-	 * @throws ReplicatorException
-	 */
-	/**
-	 * Initialize the formatter -- get it setup to lookup the keys of tables.
-	 * 
-	 * @param dbUrl URL to use connecting to the database.
-	 * @param dbUser The username to use when connecting to dbUrl.
-	 * @param dbPassword The password to use when connecting to dbUrl.
-	 * @throws ReplicatorException
-	 */
-	public void prepare(String dbUrl, String dbUser, String dbPassword)
-			throws ReplicatorException {
-		keyTracker = new TableKeyTracker(dbUrl, dbUser, dbPassword,
-				this.metrics);
-		try {
-			this.keyTracker.init();
-		} catch (TableKeyTrackerException e) {
-			logger.error("Unable to initialize TableKeyTracker", e);
-			this.keyTracker.release();
-			this.keyTracker = null;
-			throw new ReplicatorException("TableKeyTracker init failed.");
-		}
 	}
 
 	/**

@@ -59,7 +59,12 @@ public class TableKeyTracker {
 		this.metrics = metrics;
 	}
 
-	public void init() throws TableKeyTrackerException {
+	/**
+	 * Establish the connection to the key-tracking database.
+	 *
+	 * @throws TableKeyTrackerException
+	 */
+	public void prepare() throws TableKeyTrackerException {
 		try {
 			this.logger.debug("creating db with url: '" + this.dbUrl +
 					"', user: '" + this.dbUser + "'");
@@ -68,11 +73,14 @@ public class TableKeyTracker {
 			this.dbConn.connect();
 			this.lastConnectionTime = System.currentTimeMillis();
 		} catch (SQLException e) {
-			logger.error("Unable to connect to database", e);
+			String err = String.format("Unable to connect to primary key " + 
+					"tracking DB '%s' as user: '%s', error: %s",
+					this.dbUrl, this.dbUser, e.toString());
+			logger.error(err, e);
 			this.metrics.dbConnectError();
-			throw new TableKeyTrackerException("Unable to connect to database");
+			throw new TableKeyTrackerException(err);
 		}
-		logger.debug("Initted TableKeyTracker to: " + dbUrl);
+		logger.debug("Initted TableKeyTracker to DB: " + dbUrl);
 	}
 
 	/**
