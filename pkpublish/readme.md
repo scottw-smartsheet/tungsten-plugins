@@ -129,15 +129,50 @@ to the `thl-to-q` stage, after the `logger` plugin.
 
 # Filtering Rules Specification
 
-The filter rules allow the stream of `ReplDBMSEvents` to be partioned out in
-several useful ways.  The filter rules specify the schema/database name,
-table name, and type of change (`INSERT`, `UPDATE`, or `DELETE`) that the
-filter should send to the message queue.
+A transaction filter is composed of one or more row filters.  The
+`filter_match_rule` and `row_match_rule` attributes control what
+constitutes a sucessful match of the entire transaction (not just its
+constituent rows).
+
+The `filter_match_rule` can be set to `ALL`, `ANY`, or `NONE` to indicate
+how many of the row filters must be matched to consider the that the entire
+transaction has matched.
+
+The `row_match_rule` can be set to `ALL`, `ANY`, or `NONE` to indicate
+how many of the rows in the transaction must be matched to consider that
+the entire transaction has matched.
+
+If either of the `filter_match_rule` or `row_match_rule` are not satisfied,
+then the transaction is not matched.
+
+The default policy is that a transaction filter only matches if all of its
+row filters and all of its rows match.
+
+Each row filter specifies the schema/database name, table name, and type of
+change (`INSERT`, `UPDATE`, or `DELETE`) that the filter should send to the
+message queue.
 
 The schema and table name values can also specify the `"*"` wild card,
 which will match any schema or table name.  In addition, the change
 type can be specified as a list, `["INSERT", "UPDATE"]` or using the
 `"*"` wild card.
+
+If the transaction filter does not specify a publish action, then it will
+not publish a message for the whole transaction upon match.  If any of its
+row filters have a publish action, these will be published if they match,
+regardless of whether or not the entire transaction matches.
+
+The `name` attribute of a transaction filter is required and optional for
+row filters.
+
+Both transaction and row filters can define a publish action with optional
+parameters of `message` and `routing_key`.  If these parameters are not
+given, ones will be automatically created.  For row filters, the
+automatically generated routing key is:
+   `<schema name>.<table name>.<change type>`
+For transaction filters, the name of the transaction filter is used as its
+routing key.
+
 
 TODO: These example filters need help.
 ```
@@ -145,8 +180,8 @@ TODO: These example filters need help.
     "transaction_filters": [
         {
             "name": "Add User",
-            "must_match_all_filters": true,
-            "must_match_all_rows": true,
+            "filter_match_rule": "ALL",
+            "row_match_rule": "ALL",
             "actions": [
                 "publish": true,
                 "routing_key": "add user",
