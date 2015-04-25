@@ -37,34 +37,21 @@ import com.smartsheet.tin.filters.common.TransactionInfo;
 
 public class TransactionMatchResultAccumulator {
 	private static Logger logger = Logger.getLogger(TransactionMatchResultAccumulator.class);
-	private List<Pair<OneRowChange, RowFilter>> matched_orcs_and_their_filters;
-	private Map<RowFilter, Boolean> row_filter_match_state;
-	private Map<OneRowChange, Boolean> orc_match_state;
 	private TransactionFilter tfilter;
 	private ReplDBMSEvent event;
-	private boolean all_orcs_matched;
-	private boolean transaction_filter_matched;
+	// We accumulate state info (about whether matched or not) to these.
+	private List<Pair<OneRowChange, RowFilter>> matched_orcs_and_their_filters;
+	private Map<RowFilter, Boolean> row_filter_match_results;
+	private Map<OneRowChange, Boolean> orc_match_results;
 
-	public TransactionMatchResultAccumulator(TransactionFilter tf, ReplDBMSEvent event) {
-		this.matched_orcs_and_their_filters = new ArrayList<Pair<OneRowChange, RowFilter>>();
-		this.row_filter_match_state = new HashMap<RowFilter, Boolean>();
-		this.orc_match_state = new HashMap<OneRowChange, Boolean>();
+	public TransactionMatchResultAccumulator(TransactionFilter tf,
+			ReplDBMSEvent event) {
 		this.event = event;
 		this.tfilter = tf;
-		this.all_orcs_matched = true;
-		this.transaction_filter_matched = true;
-	}
-
-	// FIXME:  Handle No ORCs matching differently than at least one ORC matching. 
-	// Right now, they are effectively equivalent.
-
-
-	public void setAllORCsMatched(boolean all_orcs_matched) {
-		this.all_orcs_matched = all_orcs_matched;
-	}
-
-	public boolean allORCsMatched() {
-		return this.all_orcs_matched;
+		this.matched_orcs_and_their_filters = new
+				ArrayList<Pair<OneRowChange, RowFilter>>();
+		this.row_filter_match_results = new HashMap<RowFilter, Boolean>();
+		this.orc_match_results = new HashMap<OneRowChange, Boolean>();
 	}
 
 
@@ -78,15 +65,15 @@ public class TransactionMatchResultAccumulator {
 	public void recordRowFilterOrcCompare(RowFilter rf, OneRowChange orc,
 			boolean matched ) {
 		if (matched) {
-			this.orc_match_state.put(orc,  true);
-			this.row_filter_match_state.put(rf, true);
+			this.orc_match_results.put(orc,  true);
+			this.row_filter_match_results.put(rf, true);
 			this.matched_orcs_and_their_filters.add(Pair.of(orc, rf));
 		} else  {
-			if (! this.orc_match_state.containsKey(orc)) {
-				this.orc_match_state.put(orc, false);
+			if (! this.orc_match_results.containsKey(orc)) {
+				this.orc_match_results.put(orc, false);
 			}
-			if (! this.row_filter_match_state.containsKey(rf)) {
-				this.row_filter_match_state.put(rf, false);
+			if (! this.row_filter_match_results.containsKey(rf)) {
+				this.row_filter_match_results.put(rf, false);
 			}
 		}
 	}
@@ -98,7 +85,7 @@ public class TransactionMatchResultAccumulator {
 	 * @return true if all RowFilters matched, false otherwise.
 	 */
 	public boolean allRowFiltersMatched() {
-		return ! this.row_filter_match_state.values().contains(false);
+		return ! this.row_filter_match_results.values().contains(false);
 	}
 
 
@@ -108,7 +95,7 @@ public class TransactionMatchResultAccumulator {
 	 * @return true if at least one RowFilter matched, false otherwise.
 	 */
 	public boolean anyRowFiltersMatched() {
-		return this.row_filter_match_state.values().contains(true);
+		return this.row_filter_match_results.values().contains(true);
 	}
 
 
@@ -128,7 +115,7 @@ public class TransactionMatchResultAccumulator {
 	 * @return true if all the OneRowChanges were matched by a RowFilter.
 	 */
 	public boolean allOrcsMatched() {
-		return ! this.orc_match_state.values().contains(false);
+		return ! this.orc_match_results.values().contains(false);
 	}
 
 
@@ -138,7 +125,7 @@ public class TransactionMatchResultAccumulator {
 	 * @return true if any of the OneRowChanges were matched by a RowFilter.
 	 */
 	public boolean anyOrcsMatched() {
-		return this.orc_match_state.values().contains(true);
+		return this.orc_match_results.values().contains(true);
 	}
 
 
@@ -152,10 +139,6 @@ public class TransactionMatchResultAccumulator {
 	}
 
 
-	public boolean transactionFilterDidMatch() {
-		return this.transaction_filter_matched;
-	}
-	
 	/**
 	 * Return whether or not the underlying event matched the filter.
 	 * 

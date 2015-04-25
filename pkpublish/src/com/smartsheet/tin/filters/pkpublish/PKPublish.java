@@ -309,7 +309,7 @@ public class PKPublish implements Filter {
 		for (TransactionMatchResultAccumulator result : results) {
 			logger.debug("Publishing results for result: " + result.toString());
 			publishResultRowFilterMessages(result, event);
-			if (result.transactionFilterDidMatch()) {
+			if (result.matched()) {
 				publishResultTransactionFilterMessage(result, event);
 			}
 		}
