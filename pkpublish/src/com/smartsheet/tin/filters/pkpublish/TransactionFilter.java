@@ -367,7 +367,8 @@ public class TransactionFilter {
 			RowChangeData rcdata = (RowChangeData) edata;
 			for (OneRowChange orc : rcdata.getRowChanges()) {
 				for (RowFilter rf : this.row_filters) {
-					result.recordRowFilterOrcCompare(rf, orc, rf.match(orc));
+					boolean matched = rf.match(orc);
+					result.recordRowFilterOrcCompare(rf, orc, matched);
 				}
 			}
 		}
